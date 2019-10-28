@@ -4,10 +4,8 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 	"log"
 	"os"
-	"strconv"
 
 	"github.com/zgiles/ptar/pkg/ptar"
-	"sync"
 )
 
 type rootConfig struct {
@@ -67,37 +65,8 @@ func main() {
 		log.Println("  Indexes: ", config.Index)
 	}
 
-	compressionsuffix := ""
-	if config.Compression != "" {
-		compressionsuffix = "." + config.Compression
-	}
-
-	globalwg := new(sync.WaitGroup)
-	scanwg := new(sync.WaitGroup)
-	partitionswg := new(sync.WaitGroup)
-	entries := make(chan string, 1024)
-	e := make(chan error, 1024)
-
-	globalwg.Add(1)
-	scanwg.Add(1)
-	go ptar.Scan(scanwg, config.Input, entries, e)
-
-	globalwg.Add(1)
-	go ptar.Errornotice(globalwg, e)
-
-	// for all partitions
-	globalwg.Add(1)
-
-	for i := 0; i < config.Threads; i++ {
-		partitionswg.Add(1)
-		go ptar.TarChannel(partitionswg, config.Prefix+"."+strconv.Itoa(i)+".tar"+compressionsuffix, entries, e, config.Compression, config.Index, config.Verbose)
-	}
-	// go channelcounter(wg, "files", entries)
-	scanwg.Wait()
-	globalwg.Done()
-	partitionswg.Wait()
-	globalwg.Done()
-
-	close(e)
-	globalwg.Wait()
+	// NewArchive(inputpath string, outputpath string, tarthreads int, compression string, index bool) (*Archive)
+	arch := ptar.NewArchive(config.Input, config.Prefix, config.Threads, config.Compression, config.Index)
+	arch.Verbose = config.Verbose
+	arch.Begin()
 }
