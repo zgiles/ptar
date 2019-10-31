@@ -76,7 +76,7 @@ func main() {
 	arch := ptar.NewArchive(config.Input, config.Prefix, config.Threads, config.Compression, config.Index)
 	arch.Verbose = config.Verbose
 	arch.Scanner = scanner.NewScanner()
-	arch.Indexer = index.NewIndex()
+	arch.Indexer = index.NewIndex
 	arch.FileMaker = RegularFileCreate
 	arch.Begin()
 }

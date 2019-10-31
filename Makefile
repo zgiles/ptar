@@ -7,12 +7,12 @@ RPMVERSION := $(if $(RPMVERSIONRAW),$(RPMVERSIONRAW),0.0.1)
 RPMRELEASERAW := $(shell git describe --tags --always --dirty | sed -rn  's/^[v]*([0-9.]+)*[-]*(.*)/\2/p' | sed 's/-/./g')
 RPMRELEASE := $(if $(RPMRELEASERAW),$(RPMRELEASERAW),1)
 # VENDOR := "-mod=vendor"
-PKG := github.com/zgiles/ptar/...
+PKGBASE := github.com/zgiles/ptar/cmd
 
 all: cmd-ptar
 
 cmd-ptar:
 	# VENDOR: ${VENDOR}
 	# VERSION: ${VERSION}
-	CGO_ENABLED=0 go build ${VENDOR} -ldflags "-w -extldflags -static -X main.version=${VERSION}" ${PKG}
+	CGO_ENABLED=0 go build ${VENDOR} -ldflags "-w -extldflags -static -X main.version=${VERSION}" ${PKGBASE}/ptar
 

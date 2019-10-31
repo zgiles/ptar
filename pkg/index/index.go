@@ -51,10 +51,10 @@ func (index *Index) IndexWriter(f io.WriteCloser) {
 		}
 		if i.Hash == "" {
 			fmt.Fprintf(w, "%d:%d::%s\n", i.Pos, i.Size, i.Name)
-			fmt.Printf("%d:%d::%s\n", i.Pos, i.Size, i.Name)
+			// fmt.Printf("%d:%d::%s\n", i.Pos, i.Size, i.Name)
 		} else {
 			fmt.Fprintf(w, "%d:%d:%16s:%s\n", i.Pos, i.Size, i.Hash, i.Name)
-			fmt.Printf("%d:%d:%16s:%s\n", i.Pos, i.Size, i.Hash, i.Name)
+			// fmt.Printf("%d:%d:%16s:%s\n", i.Pos, i.Size, i.Hash, i.Name)
 		}
 		// w.Flush()
 	}

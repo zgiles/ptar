@@ -8,7 +8,7 @@ import (
 	"fmt"
 
 	"github.com/pierrec/lz4"
-	"github.com/zgiles/ptar/pkg/index"
+	index "github.com/zgiles/ptar/pkg/index"
 	// "github.com/zgiles/ptar/pkg/scanner"
 	"github.com/zgiles/ptar/pkg/writecounter"
 
@@ -45,7 +45,7 @@ type Archive struct {
 	Index        bool
 	Verbose      bool
 	Scanner      Scanner
-	Indexer      Indexer
+	Indexer      func() *index.Index
 	FileMaker    func(string) (io.WriteCloser, error)
 	globalwg     *sync.WaitGroup
 	scanwg       *sync.WaitGroup
@@ -137,6 +137,7 @@ func (arch *Archive) tarChannel(threadnum int) {
 	defer arch.partitionswg.Done()
 	defer arch.globalwg.Done()
 	var r io.WriteCloser
+	var idx *index.Index
 	var ientries chan index.IndexItem
 	// ientries := make(chan IndexItem, 1024)
 	indexwg := new(sync.WaitGroup)
@@ -167,17 +168,17 @@ func (arch *Archive) tarChannel(threadnum int) {
 	}
 
 	if arch.Index {
+		idx = arch.Indexer()
 		indexwg.Add(1)
+		f, ferr := arch.FileMaker(filename + ".index")
+		if ferr != nil {
+			panic(ferr)
+		}
+		ientries = idx.Channel()
 		go func() {
-			f, ferr := arch.FileMaker(filename + ".index")
-			if ferr != nil {
-				panic(ferr)
-			}
-			arch.Indexer.IndexWriter(f)
+			idx.IndexWriter(f)
 			indexwg.Done()
 		}()
-		ientries = arch.Indexer.Channel()
-		defer arch.Indexer.Close()
 		// go indexwriter(indexwg, filename+".index", ientries)
 	}
 
@@ -274,8 +275,11 @@ func (arch *Archive) tarChannel(threadnum int) {
 			// log.Printf("%v", ientry)
 		}
 	}
+	if arch.Index {
+		idx.Close()
+	}
+	indexwg.Wait()
 	// fmt.Printf("Pre Write Pos: %d\n", cw.Pos())
 	// fmt.Printf("Closing Write Pos: %d\n", cw.Pos())
 	// close(ientries)
-	indexwg.Wait()
 }
