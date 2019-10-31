@@ -20,7 +20,7 @@ import (
 )
 
 type Indexer interface {
-	IndexWriter(string)
+	IndexWriter(io.WriteCloser)
 	Close()
 	Channel() chan index.IndexItem
 }
@@ -46,6 +46,7 @@ type Archive struct {
 	Verbose      bool
 	Scanner      Scanner
 	Indexer      Indexer
+	FileMaker    func(string) (io.WriteCloser, error)
 	globalwg     *sync.WaitGroup
 	scanwg       *sync.WaitGroup
 	partitionswg *sync.WaitGroup
@@ -141,11 +142,11 @@ func (arch *Archive) tarChannel(threadnum int) {
 	indexwg := new(sync.WaitGroup)
 
 	filename := arch.OutputPath + "." + strconv.Itoa(threadnum) + ".tar" + arch.Compression
-	f, ferr := os.Create(filename)
+	f, ferr := arch.FileMaker(filename)
 	if ferr != nil {
 		panic(ferr)
 	}
-	defer f.Sync()
+	// defer f.Sync()
 	defer f.Close()
 
 	switch arch.Compression {
@@ -168,7 +169,11 @@ func (arch *Archive) tarChannel(threadnum int) {
 	if arch.Index {
 		indexwg.Add(1)
 		go func() {
-			arch.Indexer.IndexWriter(filename + ".index")
+			f, ferr := arch.FileMaker(filename + ".index")
+			if ferr != nil {
+				panic(ferr)
+			}
+			arch.Indexer.IndexWriter(f)
 			indexwg.Done()
 		}()
 		ientries = arch.Indexer.Channel()

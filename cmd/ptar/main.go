@@ -2,6 +2,7 @@ package main
 
 import (
 	"gopkg.in/alecthomas/kingpin.v2"
+	"io"
 	"log"
 	"os"
 
@@ -21,6 +22,10 @@ type rootConfig struct {
 	GOGCPercent int
 	GOMAXProcs  int
 	Create      bool
+}
+
+func RegularFileCreate(filename string) (io.WriteCloser, error) {
+	return os.Create(filename)
 }
 
 var version string
@@ -72,5 +77,6 @@ func main() {
 	arch.Verbose = config.Verbose
 	arch.Scanner = scanner.NewScanner()
 	arch.Indexer = index.NewIndex()
+	arch.FileMaker = RegularFileCreate
 	arch.Begin()
 }

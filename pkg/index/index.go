@@ -3,7 +3,8 @@ package index
 import (
 	"bufio"
 	"fmt"
-	"os"
+	"io"
+	// "os"
 	// "sync"
 )
 
@@ -30,14 +31,16 @@ func NewIndex() *Index {
 	return index
 }
 
-func (index *Index) IndexWriter(filename string) {
-	index.filename = filename
+func (index *Index) IndexWriter(f io.WriteCloser) {
+	// index.filename = filename
 	// defer index.wg.Done()
-	var f *os.File
-	f, ferr := os.Create(index.filename)
-	if ferr != nil {
-		panic(ferr)
-	}
+	/*
+		var f *os.File
+		f, ferr := os.Create(index.filename)
+		if ferr != nil {
+			panic(ferr)
+		}
+	*/
 	defer f.Close()
 	w := bufio.NewWriter(f)
 	defer w.Flush()
