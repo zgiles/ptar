@@ -6,18 +6,17 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
-	// "syscall"
 
-	"github.com/karrick/godirwalk"
 	"github.com/pierrec/lz4"
 	"github.com/zgiles/ptar/pkg/index"
+	"github.com/zgiles/ptar/pkg/scanner"
 	"github.com/zgiles/ptar/pkg/writecounter"
 
 	// xz "github.com/remyoudompheng/go-liblzma"
 	"io"
 	"os"
-	"sync"
 	"strconv"
+	"sync"
 )
 
 type Partition struct {
@@ -25,37 +24,30 @@ type Partition struct {
 	entries  chan string
 }
 
-/*
-type IndexItem struct {
-	hash string
-	pos  uint64
-	size uint64
-	name string
-}
-*/
-
 type Archive struct {
-	InputPath	string
-	OutputPath	string
-	TarThreads	int
-	TarMaxSize	int
-	Compression	string
-	Index		bool
-	Verbose		bool
-	globalwg *sync.WaitGroup
-	scanwg *sync.WaitGroup
+	InputPath    string
+	OutputPath   string
+	TarThreads   int
+	TarMaxSize   int
+	Compression  string
+	Index        bool
+	Verbose      bool
+	ScanFunc     func(string, chan string, chan error)
+	globalwg     *sync.WaitGroup
+	scanwg       *sync.WaitGroup
 	partitionswg *sync.WaitGroup
-	entries chan string
-	errors chan error
+	entries      chan string
+	errors       chan error
 }
 
-func NewArchive(inputpath string, outputpath string, tarthreads int, compression string, index bool) (*Archive) {
+func NewArchive(inputpath string, outputpath string, tarthreads int, compression string, index bool) *Archive {
 	arch := &Archive{
-		InputPath: inputpath,
-		OutputPath: outputpath,
-		TarThreads: tarthreads,
+		InputPath:   inputpath,
+		OutputPath:  outputpath,
+		TarThreads:  tarthreads,
 		Compression: compression,
-		Index: index,
+		Index:       index,
+		ScanFunc:    scanner.Scan,
 	}
 	return arch
 }
@@ -69,7 +61,11 @@ func (arch *Archive) Begin() {
 
 	arch.globalwg.Add(1)
 	arch.scanwg.Add(1)
-	go arch.scan()
+	go func() {
+		arch.ScanFunc(arch.InputPath, arch.entries, arch.errors)
+		arch.scanwg.Done()
+		arch.globalwg.Done()
+	}()
 
 	arch.globalwg.Add(1)
 	go arch.errornotice()
@@ -88,26 +84,6 @@ func (arch *Archive) Begin() {
 
 	close(arch.errors)
 	arch.globalwg.Wait()
-}
-
-func (arch *Archive) scan() {
-	err := godirwalk.Walk(arch.InputPath, &godirwalk.Options{
-		Unsorted: true,
-		Callback: func(osPathname string, de *godirwalk.Dirent) error {
-			arch.entries <- osPathname
-			return nil
-		},
-		ErrorCallback: func(osPathname string, err error) godirwalk.ErrorAction {
-			arch.errors <- err
-			return godirwalk.SkipNode
-		},
-	})
-	if err != nil {
-		arch.errors <- err
-	}
-	close(arch.entries)
-	arch.scanwg.Done()
-	arch.globalwg.Done()
 }
 
 func channelcounter(wg *sync.WaitGroup, t string, c chan string) {
@@ -138,60 +114,6 @@ func (arch *Archive) errornotice() {
 	arch.globalwg.Done()
 }
 
-/*
-func indexwriter(wg *sync.WaitGroup, file string, entries chan index.IndexItem) {
-	defer wg.Done()
-	var f *os.File
-	f, ferr := os.Create(file)
-	if ferr != nil {
-		panic(ferr)
-	}
-	defer f.Close()
-	w := bufio.NewWriter(f)
-	defer w.Flush()
-	for {
-		i, ok := <-entries
-		if !ok {
-			break
-		}
-		if i.hash == "" {
-			fmt.Fprintf(w, "%d:%d::%s\n", i.pos, i.size, i.name)
-			fmt.Printf("%d:%d::%s\n", i.pos, i.size, i.name)
-		} else {
-			fmt.Fprintf(w, "%d:%d:%16s:%s\n", i.pos, i.size, i.hash, i.name)
-			fmt.Printf("%d:%d:%16s:%s\n", i.pos, i.size, i.hash, i.name)
-		}
-		// w.Flush()
-	}
-}
-*/
-
-/*
-func LineWriterChannel(wg *sync.WaitGroup, entries chan string, e chan error, verbose bool) {
-	defer wg.Done()
-	for {
-		i, ok := <-entries
-		if !ok {
-			break
-		}
-		s, serr := os.Lstat(i)
-		fi, fiok := s.Sys().(*syscall.Stat_t)
-		if !fiok {
-			panic("syscall.Stat_t type assertion failed")
-		}
-		// inode,parent-inode,directory-depth,"filename","fileExtension",UID,GID,
-		// st_size,st_dev,st_blocks,st_nlink,"st_mode",st_atime,st_mtime,st_ctime,pw_fcount,pw_dirsum
-		fmt.Printf("%d,%d,0,\"%s\",\"\",%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", fi.Ino, 0, i, fi.Uid, fi.Gid, fi.Size, fi.Dev, fi.Blocks, fi.Nlink, fi.Mode, fi.Atim, fi.Mtim, fi.Ctim)
-		if serr != nil {
-			e <- serr
-			panic(serr)
-		}
-	}
-
-}
-*/
-
-
 func (arch *Archive) tarChannel(threadnum int) {
 	defer arch.partitionswg.Done()
 	defer arch.globalwg.Done()
@@ -200,7 +122,7 @@ func (arch *Archive) tarChannel(threadnum int) {
 	// ientries := make(chan IndexItem, 1024)
 	// indexwg := new(sync.WaitGroup)
 
-	filename := arch.OutputPath+"."+strconv.Itoa(threadnum)+".tar"+arch.Compression
+	filename := arch.OutputPath + "." + strconv.Itoa(threadnum) + ".tar" + arch.Compression
 	f, ferr := os.Create(filename)
 	if ferr != nil {
 		panic(ferr)
@@ -226,7 +148,7 @@ func (arch *Archive) tarChannel(threadnum int) {
 	}
 
 	if arch.Index {
-		tarindex := index.NewIndex(filename+".index")
+		tarindex := index.NewIndex(filename + ".index")
 		ientries = tarindex.C
 		defer tarindex.Close()
 		// indexwg.Add(1)
