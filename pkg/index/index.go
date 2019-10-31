@@ -4,13 +4,13 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"sync"
+	// "sync"
 )
 
 type Index struct {
-	Filename string
-	C chan IndexItem
-	wg *sync.WaitGroup
+	filename string
+	c        chan IndexItem
+	//	wg       *sync.WaitGroup
 }
 
 type IndexItem struct {
@@ -20,20 +20,21 @@ type IndexItem struct {
 	Name string
 }
 
-func NewIndex(filename string) (*Index) {
+func NewIndex() *Index {
 	index := &Index{}
-	index.Filename = filename
-	index.wg = &sync.WaitGroup{}
-	index.C = make(chan IndexItem)
-	index.wg.Add(1)
-	go index.IndexWriter()
+	// index.filename = filename
+	// index.wg = &sync.WaitGroup{}
+	index.c = make(chan IndexItem)
+	// index.wg.Add(1)
+	// go index.IndexWriter()
 	return index
 }
 
-func (index *Index) IndexWriter() {
-	defer index.wg.Done()
+func (index *Index) IndexWriter(filename string) {
+	index.filename = filename
+	// defer index.wg.Done()
 	var f *os.File
-	f, ferr := os.Create(index.Filename)
+	f, ferr := os.Create(index.filename)
 	if ferr != nil {
 		panic(ferr)
 	}
@@ -41,7 +42,7 @@ func (index *Index) IndexWriter() {
 	w := bufio.NewWriter(f)
 	defer w.Flush()
 	for {
-		i, ok := <-index.C
+		i, ok := <-index.c
 		if !ok {
 			break
 		}
@@ -56,12 +57,18 @@ func (index *Index) IndexWriter() {
 	}
 }
 
+/*
 func (index *Index) Wait() {
 	index.wg.Wait()
 }
+*/
 
 func (index *Index) Close() {
-	close(index.C)
+	close(index.c)
+}
+
+func (index *Index) Channel() chan IndexItem {
+	return index.c
 }
 
 /*

@@ -4,16 +4,14 @@ import (
 	"github.com/karrick/godirwalk"
 )
 
-/*
-type IndexItem struct {
-	hash string
-	pos  uint64
-	size uint64
-	name string
+type Scanner struct {
 }
-*/
 
-func Scan(inputpath string, entries chan string, errors chan error) {
+func NewScanner() *Scanner {
+	return &Scanner{}
+}
+
+func (scanner *Scanner) Scan(inputpath string, entries chan string, errors chan error) {
 	err := godirwalk.Walk(inputpath, &godirwalk.Options{
 		Unsorted: true,
 		Callback: func(osPathname string, de *godirwalk.Dirent) error {

@@ -5,7 +5,9 @@ import (
 	"log"
 	"os"
 
+	"github.com/zgiles/ptar/pkg/index"
 	"github.com/zgiles/ptar/pkg/ptar"
+	"github.com/zgiles/ptar/pkg/scanner"
 )
 
 type rootConfig struct {
@@ -68,5 +70,7 @@ func main() {
 	// NewArchive(inputpath string, outputpath string, tarthreads int, compression string, index bool) (*Archive)
 	arch := ptar.NewArchive(config.Input, config.Prefix, config.Threads, config.Compression, config.Index)
 	arch.Verbose = config.Verbose
+	arch.Scanner = scanner.NewScanner()
+	arch.Indexer = index.NewIndex()
 	arch.Begin()
 }

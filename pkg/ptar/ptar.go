@@ -9,7 +9,7 @@ import (
 
 	"github.com/pierrec/lz4"
 	"github.com/zgiles/ptar/pkg/index"
-	"github.com/zgiles/ptar/pkg/scanner"
+	// "github.com/zgiles/ptar/pkg/scanner"
 	"github.com/zgiles/ptar/pkg/writecounter"
 
 	// xz "github.com/remyoudompheng/go-liblzma"
@@ -19,10 +19,22 @@ import (
 	"sync"
 )
 
+type Indexer interface {
+	IndexWriter(string)
+	Close()
+	Channel() chan index.IndexItem
+}
+
+type Scanner interface {
+	Scan(string, chan string, chan error)
+}
+
+/*
 type Partition struct {
 	filename string
 	entries  chan string
 }
+*/
 
 type Archive struct {
 	InputPath    string
@@ -32,7 +44,8 @@ type Archive struct {
 	Compression  string
 	Index        bool
 	Verbose      bool
-	ScanFunc     func(string, chan string, chan error)
+	Scanner      Scanner
+	Indexer      Indexer
 	globalwg     *sync.WaitGroup
 	scanwg       *sync.WaitGroup
 	partitionswg *sync.WaitGroup
@@ -47,8 +60,9 @@ func NewArchive(inputpath string, outputpath string, tarthreads int, compression
 		TarThreads:  tarthreads,
 		Compression: compression,
 		Index:       index,
-		ScanFunc:    scanner.Scan,
 	}
+	// need to probably do a default scanner
+	// 	ScanFunc:    scanner.Scan,
 	return arch
 }
 
@@ -59,10 +73,14 @@ func (arch *Archive) Begin() {
 	arch.entries = make(chan string, 1024)
 	arch.errors = make(chan error, 1024)
 
+	if arch.Scanner == nil {
+		return
+	}
+
 	arch.globalwg.Add(1)
 	arch.scanwg.Add(1)
 	go func() {
-		arch.ScanFunc(arch.InputPath, arch.entries, arch.errors)
+		arch.Scanner.Scan(arch.InputPath, arch.entries, arch.errors)
 		arch.scanwg.Done()
 		arch.globalwg.Done()
 	}()
@@ -120,7 +138,7 @@ func (arch *Archive) tarChannel(threadnum int) {
 	var r io.WriteCloser
 	var ientries chan index.IndexItem
 	// ientries := make(chan IndexItem, 1024)
-	// indexwg := new(sync.WaitGroup)
+	indexwg := new(sync.WaitGroup)
 
 	filename := arch.OutputPath + "." + strconv.Itoa(threadnum) + ".tar" + arch.Compression
 	f, ferr := os.Create(filename)
@@ -148,10 +166,13 @@ func (arch *Archive) tarChannel(threadnum int) {
 	}
 
 	if arch.Index {
-		tarindex := index.NewIndex(filename + ".index")
-		ientries = tarindex.C
-		defer tarindex.Close()
-		// indexwg.Add(1)
+		indexwg.Add(1)
+		go func() {
+			arch.Indexer.IndexWriter(filename + ".index")
+			indexwg.Done()
+		}()
+		ientries = arch.Indexer.Channel()
+		defer arch.Indexer.Close()
 		// go indexwriter(indexwg, filename+".index", ientries)
 	}
 
@@ -251,5 +272,5 @@ func (arch *Archive) tarChannel(threadnum int) {
 	// fmt.Printf("Pre Write Pos: %d\n", cw.Pos())
 	// fmt.Printf("Closing Write Pos: %d\n", cw.Pos())
 	// close(ientries)
-	// indexwg.Wait()
+	indexwg.Wait()
 }
